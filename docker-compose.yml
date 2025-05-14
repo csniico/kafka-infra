@@ -2,45 +2,30 @@ version: "3.8"
 
 services:
   kafka:
-    image: bitnami/kafka:latest
-    container_name: kafka
-    environment:
-      # Kafka specific configurations
-      KAFKA_BROKER_ID: 1
-      KAFKA_CFG_NODE_ID: 1 # Unique node ID
-      KAFKA_CFG_PROCESS_ROLES: broker,controller # Need both roles for KRaft
-      KAFKA_CFG_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093 # This was missing
-      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_KRAFT_MODE: true # Enabling KRaft mode
-      KAFKA_CLUSTER_ID: "WfCj5oh9SrmxT-Xzvx11Fw" # Use a fixed cluster ID
-      ALLOW_PLAINTEXT_LISTENER: "yes"
+    image: apache/kafka:latest
+    container_name: ckafka
+    user: root
     ports:
       - "9092:9092"
-    networks:
-      - kafka-net
-    volumes:
-      - kafka_data:/bitnami/kafka
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
+      # Internal controller listener port; not exposed
+      - "9093:9093"
     environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-    ports:
-      - "8080:8080" # Kafka UI on port 8080
-    networks:
-      - kafka-net
-    depends_on:
-      - kafka
-
-networks:
-  kafka-net:
-    driver: bridge
+      # Unique ID for this node in the quorum
+      KAFKA_NODE_ID: 1
+      # Run both broker and controller in a single process
+      KAFKA_PROCESS_ROLES: broker,controller
+      # Define controller quorum voters (single-node: 1@<host>:9093)
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      # Bind listeners: client PLAINTEXT on 9092, controller on 9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      # Advertise the client-facing listener
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # Name of the controller listener
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Data directory for logs (optional override)
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - ./kafka_data:/var/lib/kafka/data
 
 volumes:
   kafka_data:
