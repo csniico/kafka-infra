@@ -1,32 +1,64 @@
-version: "3.8"
-
 services:
-  kafka:
-    image: apache/kafka:latest
-    container_name: ckafka
-    user: root
+  jaeger:
+    image: jaegertracing/all-in-one:latest
     ports:
-      - "9092:9092"
-      # Internal controller listener port; not exposed
-      - "9093:9093"
+      - 4318:4318 # OTLP
+      - 16686:16686 # UI
+      - 14269:14269 # Admin
+      - 14268:14268 # Collector
     environment:
-      # Unique ID for this node in the quorum
-      KAFKA_NODE_ID: 1
-      # Run both broker and controller in a single process
-      KAFKA_PROCESS_ROLES: broker,controller
-      # Define controller quorum voters (single-node: 1@<host>:9093)
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-      # Bind listeners: client PLAINTEXT on 9092, controller on 9093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      # Advertise the client-facing listener
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      # Name of the controller listener
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      # Data directory for logs (optional override)
-      KAFKA_LOG_DIRS: /var/lib/kafka/data
-    volumes:
-      - ./kafka_data:/var/lib/kafka/data
+      COLLECTOR_OTLP_ENABLED: "true"
+    network_mode: host
 
-volumes:
-  kafka_data:
-    driver: local
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    network_mode: host
+
+  notification-service:
+    image: chrisncs/notification-service
+    ports:
+      - "9292:9292"
+    environment:
+      TRACING_URL: http://localhost:4318/v1/traces
+      SNS_TOPIC_ARN: arn:aws:sns:eu-west-1:124355645722:primaryApplication
+      AWS_REGION: eu-west-1
+    network_mode: host
+    depends_on:
+      - jaeger
+
+  user-service:
+    image: chrisncs/user-service
+    ports:
+      - "9193:9193"
+    environment:
+      TRACING_URL: http://localhost:4318/v1/traces
+      SPRING_DATASOURCE_HOST_URL: jdbc:postgresql://localhost:5432/tms
+      SPRING_DATASOURCE_USERNAME: postgres-user
+      SPRING_DATASOURCE_PASSWORD: postgres-pass
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: http://localhost:9092
+      SERVER_PORT: "9193"
+    network_mode: host
+    depends_on:
+      - jaeger
+
+  task-api:
+    image: chrisncs/task-api
+    ports:
+      - "9191:9191"
+    environment:
+      SPRING_DATASOURCE_HOST_URL: jdbc:postgresql://localhost:5432/tms
+      SPRING_DATASOURCE_USERNAME: postgres-user
+      SPRING_DATASOURCE_PASSWORD: postgres-pass
+      TRACING_URL: http://localhost:4318/v1/traces
+      SERVER_PORT: "9191"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: http://localhost:9092
+    network_mode: host
+    depends_on:
+      - jaeger
+
+networks:
+  app-network:
+    driver: bridge
