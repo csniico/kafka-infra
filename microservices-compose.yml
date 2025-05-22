@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: postgres
+    container_name: postgres
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: postgresuser
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: tms
+    networks:
+      - shared
+
+  notification-service:
+    image: chrisncs/notification-service:1.4
+    container_name: notification-service
+    ports:
+      - "9292:9292"
+    environment:
+      - SNS_TOPIC_ARN=arn:aws:sns:eu-west-1:124355645722:primaryApplication
+      - AWS_REGION=eu-west-1
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=ckafka:9092
+      - SERVER_PORT=9292
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://jaeger:4318/v1/traces
+      - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://prometheus:9090/api/v1/otlp/v1/metrics
+      - OTEL_SERVICE_NAME=notification-service
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_PROPAGATORS=tracecontext,baggage,b3
+    networks:
+      - shared
+
+  user-service:
+    image: chrisncs/user-service:1.4
+    container_name: user-service
+    ports:
+      - "9193:9193"
+    environment:
+      SPRING_DATASOURCE_HOST_URL: jdbc:postgresql://postgres:5432/tms
+      SPRING_DATASOURCE_USERNAME: postgresuser
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: ckafka:9092
+      SERVER_PORT: "9193"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://jaeger:4318/v1/traces"
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "http://prometheus:9090/api/v1/otlp/v1/metrics"
+      OTEL_SERVICE_NAME: "user-service"
+      OTEL_METRICS_EXPORTER: "otlp"
+      OTEL_LOGS_EXPORTER: "none"
+      OTEL_PROPAGATORS: "tracecontext,baggage,b3"
+    networks:
+      - shared
+
+  task-api:
+    image: chrisncs/task-api:1.4
+    container_name: task-api
+    ports:
+      - "9191:9191"
+    environment:
+      SPRING_DATASOURCE_HOST_URL: jdbc:postgresql://postgres:5432/tms
+      SPRING_DATASOURCE_USERNAME: postgresuser
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      SERVER_PORT: "9191"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: ckafka:9092
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://jaeger:4318/v1/traces"
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "http://prometheus:9090/api/v1/otlp/v1/metrics"
+      OTEL_SERVICE_NAME: "task-service"
+      OTEL_METRICS_EXPORTER: "otlp"
+      OTEL_LOGS_EXPORTER: "none"
+      OTEL_PROPAGATORS: "tracecontext,baggage,b3"
+    networks:
+      - shared
+
+  ckafka:
+    user: root
+    image: apache/kafka:latest
+    container_name: ckafka
+    networks:
+      - shared
+    environment:
+      KAFKA_KRAFT_MODE: "true"
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@ckafka:9093"
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://ckafka:9092
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: "Mk3OEYBSD34fcwNTJENDM2Qk"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/var/lib/kafka/data
+
+networks:
+  shared:
+    external: true
+    name: shared-network-microservice
