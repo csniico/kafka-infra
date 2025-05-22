@@ -11,6 +11,17 @@ services:
     networks:
       - shared
 
+  frontend:
+    image: godcandidate/frontend-service:latest
+    ports:
+      - "81:3000"
+    environment:
+      - NODE_ENV=production
+      - AUTH_API_URL=http://localhost:9193/api/v1
+      - TASK_API_URL=http://localhost:9191/api/v1
+    networks:
+      - shared
+
   notification-service:
     image: chrisncs/notification-service:1.4
     container_name: notification-service
