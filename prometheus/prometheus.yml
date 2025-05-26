@@ -20,3 +20,7 @@ scrape_configs:
   - job_name: "jaeger"
     static_configs:
       - targets: ["jaeger:14269"]
+
+  - job_name: "kafka"
+    static_configs:
+      - targets: ["ckafka:5556"]
